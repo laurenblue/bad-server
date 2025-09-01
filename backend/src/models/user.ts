@@ -1,4 +1,3 @@
-/* eslint-disable no-param-reassign */
 import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import mongoose, { Document, HydratedDocument, Model, Types } from 'mongoose'
@@ -14,9 +13,10 @@ export enum Role {
 }
 
 export interface IUser extends Document {
+    _id?: Types.ObjectId
     name: string
     email: string
-    password: string
+    password?: string
     tokens: { token: string }[]
     roles: Role[]
     phone: string
@@ -49,25 +49,21 @@ const userSchema = new mongoose.Schema<IUser, IUserModel, IUserMethods>(
             minlength: [2, 'Минимальная длина поля "name" - 2'],
             maxlength: [30, 'Максимальная длина поля "name" - 30'],
         },
-        // в схеме пользователя есть обязательные email и password
         email: {
             type: String,
             required: [true, 'Поле "email" должно быть заполнено'],
-            unique: true, // поле email уникально (есть опция unique: true);
+            unique: true,
             validate: {
-                // для проверки email студенты используют validator
                 validator: (v: string) => validator.isEmail(v),
                 message: 'Поле "email" должно быть валидным email-адресом',
             },
         },
-        // поле password не имеет ограничения на длину, т.к. пароль хранится в виде хэша
         password: {
             type: String,
             required: [true, 'Поле "password" должно быть заполнено'],
             minlength: [6, 'Минимальная длина поля "password" - 6'],
             select: false,
         },
-
         tokens: [
             {
                 token: { required: true, type: String },
@@ -102,10 +98,9 @@ const userSchema = new mongoose.Schema<IUser, IUserModel, IUserMethods>(
     {
         versionKey: false,
         timestamps: true,
-        // Возможно удаление пароля в контроллере создания, т.к. select: false не работает в случае создания сущности https://mongoosejs.com/docs/api/document.html#Document.prototype.toJSON()
         toJSON: {
             virtuals: true,
-            transform: (_doc, ret) => {
+            transform: (_doc: any, ret: any) => {
                 delete ret.tokens
                 delete ret.password
                 delete ret._id
@@ -116,10 +111,9 @@ const userSchema = new mongoose.Schema<IUser, IUserModel, IUserMethods>(
     }
 )
 
-// Возможно добавление хеша в контроллере регистрации
 userSchema.pre('save', async function hashingPassword(next) {
     try {
-        if (this.isModified('password')) {
+        if (this.isModified('password') && this.password) {
             this.password = md5(this.password)
         }
         next()
@@ -128,14 +122,11 @@ userSchema.pre('save', async function hashingPassword(next) {
     }
 })
 
-// Можно лучше: централизованное создание accessToken и  refresh токена
-
 userSchema.methods.generateAccessToken = function generateAccessToken() {
-    const user = this
-    // Создание accessToken токена возможно в контроллере авторизации
+    const user = this as IUser
     return jwt.sign(
         {
-            _id: user._id.toString(),
+            _id: (user._id as Types.ObjectId).toString(),
             email: user.email,
         },
         ACCESS_TOKEN.secret,
@@ -148,11 +139,10 @@ userSchema.methods.generateAccessToken = function generateAccessToken() {
 
 userSchema.methods.generateRefreshToken =
     async function generateRefreshToken() {
-        const user = this
-        // Создание refresh токена возможно в контроллере авторизации/регистрации
+        const user = this as IUser
         const refreshToken = jwt.sign(
             {
-                _id: user._id.toString(),
+                _id: (user._id as Types.ObjectId).toString(),
             },
             REFRESH_TOKEN.secret,
             {
@@ -161,13 +151,11 @@ userSchema.methods.generateRefreshToken =
             }
         )
 
-        // Можно лучше: Создаем хеш refresh токена
         const rTknHash = crypto
             .createHmac('sha256', REFRESH_TOKEN.secret)
             .update(refreshToken)
             .digest('hex')
 
-        // Сохраняем refresh токена в базу данных, можно делать в контроллере авторизации/регистрации
         user.tokens.push({ token: rTknHash })
         await user.save()
 
@@ -181,7 +169,9 @@ userSchema.statics.findUserByCredentials = async function findByCredentials(
     const user = await this.findOne({ email })
         .select('+password')
         .orFail(() => new UnauthorizedError('Неправильные почта или пароль'))
-    const passwdMatch = md5(password) === user.password
+
+    const passwdMatch = user.password ? md5(password) === user.password : false
+
     if (!passwdMatch) {
         return Promise.reject(
             new UnauthorizedError('Неправильные почта или пароль')
@@ -191,7 +181,7 @@ userSchema.statics.findUserByCredentials = async function findByCredentials(
 }
 
 userSchema.methods.calculateOrderStats = async function calculateOrderStats() {
-    const user = this
+    const user = this as IUser
     const orderStats = await mongoose.model('order').aggregate([
         { $match: { customer: user._id } },
         {
@@ -220,6 +210,6 @@ userSchema.methods.calculateOrderStats = async function calculateOrderStats() {
 
     await user.save()
 }
-const UserModel = mongoose.model<IUser, IUserModel>('user', userSchema)
 
+const UserModel = mongoose.model<IUser, IUserModel>('user', userSchema)
 export default UserModel
