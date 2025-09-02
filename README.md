@@ -1,5 +1,8 @@
 # Проектная работа "WebLarek. Плохой сервер.", спринт 17
 
+https://github.com/laurenblue/bad-server.git
+Cohort 27 
+
 ## Подготовка к работе
 1. Склонировать репозиторий
 2. Запустить docker
