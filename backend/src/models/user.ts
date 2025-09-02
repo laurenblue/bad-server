@@ -13,7 +13,7 @@ export enum Role {
 }
 
 export interface IUser extends Document<any> {
-    _id?: Types.ObjectId
+    _id: Types.ObjectId
     name: string
     email: string
     password?: string
