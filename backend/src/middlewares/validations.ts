@@ -1,8 +1,8 @@
 import { Joi, celebrate } from 'celebrate'
 import { Types } from 'mongoose'
 
-// eslint-disable-next-line no-useless-escape
-export const phoneRegExp = /^(\+\d+)?(?:\s|-?|\(?\d+\)?)+$/
+export const phoneRegExp =
+    /^\+7(\d{10}|\s?\(?\d{3}\)?\s?\d{3}[- ]?\d{2}[- ]?\d{2})$/
 
 export enum PaymentType {
     Card = 'card',
@@ -37,6 +37,8 @@ export const validateOrderBody = celebrate({
         }),
         phone: Joi.string().required().pattern(phoneRegExp).messages({
             'string.empty': 'Не указан телефон',
+            'string.pattern.base':
+                'Телефон должен быть в формате +7XXXXXXXXXX',
         }),
         address: Joi.string().required().messages({
             'string.empty': 'Не указан адрес',
@@ -131,5 +133,22 @@ export const validateAuthentication = celebrate({
         password: Joi.string().required().messages({
             'string.empty': 'Поле "password" должно быть заполнено',
         }),
+    }),
+})
+
+export const validateOrdersQuery = celebrate({
+    query: Joi.object().keys({
+        page: Joi.number().integer().min(1).default(1),
+        limit: Joi.number().integer().min(1).default(10),
+        sortField: Joi.string()
+            .valid('createdAt', 'totalAmount', 'orderNumber')
+            .default('createdAt'),
+        sortOrder: Joi.string().valid('asc', 'desc').default('desc'),
+        status: Joi.string(),
+        search: Joi.string(),
+        totalAmountFrom: Joi.number(),
+        totalAmountTo: Joi.number(),
+        orderDateFrom: Joi.date(),
+        orderDateTo: Joi.date(),
     }),
 })

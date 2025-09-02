@@ -5,29 +5,46 @@ import 'dotenv/config'
 import express, { json, urlencoded } from 'express'
 import mongoose from 'mongoose'
 import path from 'path'
-import { DB_ADDRESS } from './config'
+import { DB_ADDRESS, ORIGIN_ALLOW } from './config'
 import errorHandler from './middlewares/error-handler'
 import serveStatic from './middlewares/serverStatic'
 import routes from './routes'
+import { doubleCsrf } from 'csrf-csrf'
+import rateLimit from 'express-rate-limit'
 
 const { PORT = 3000 } = process.env
 const app = express()
 
 app.use(cookieParser())
 
-app.use(cors())
-// app.use(cors({ origin: ORIGIN_ALLOW, credentials: true }));
-// app.use(express.static(path.join(__dirname, 'public')));
+const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
+    getSecret: () => 'your-very-secret-key',
+    getSessionIdentifier: (req) => req.ip || '',
+})
 
-app.use(serveStatic(path.join(__dirname, 'public')))
+app.use(cors({ origin: ORIGIN_ALLOW, credentials: true }))
 
-app.use(urlencoded({ extended: true }))
-app.use(json())
+app.use('/api/images', serveStatic(path.join(__dirname, 'public', 'images')))
+app.use(urlencoded({ extended: true, limit: '10mb' }))
+app.use(json({ limit: '10mb' }))
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 30,
+    message: 'Too many requests, please try again later.',
+})
 
-app.options('*', cors())
-app.use(routes)
+app.use(limiter)
+app.options('*', cors({ origin: ORIGIN_ALLOW, credentials: true }))
+app.use('/api', routes)
 app.use(errors())
 app.use(errorHandler)
+
+app.get('/csrf-token', (req, res) => {
+    const csrfToken = generateCsrfToken(req, res)
+    res.send({ csrfToken })
+})
+
+app.use(doubleCsrfProtection)
 
 // eslint-disable-next-line no-console
 

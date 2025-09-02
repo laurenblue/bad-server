@@ -7,6 +7,7 @@ import ConflictError from '../errors/conflict-error'
 import NotFoundError from '../errors/not-found-error'
 import Product from '../models/product'
 import movingFile from '../utils/movingFile'
+import { sanitize } from '../utils/sanitize'
 
 // GET /product
 const getProducts = async (req: Request, res: Response, next: NextFunction) => {
@@ -52,11 +53,11 @@ const createProduct = async (
         }
 
         const product = await Product.create({
-            description,
+            description: sanitize(description),
             image,
-            category,
+            category: sanitize(category),
             price,
-            title,
+            title: sanitize(title),
         })
         return res.status(constants.HTTP_STATUS_CREATED).send(product)
     } catch (error) {
@@ -72,7 +73,6 @@ const createProduct = async (
     }
 }
 
-// TODO: Добавить guard admin
 // PUT /product
 const updateProduct = async (
     req: Request,
@@ -83,7 +83,6 @@ const updateProduct = async (
         const { productId } = req.params
         const { image } = req.body
 
-        // Переносим картинку из временной папки
         if (image) {
             movingFile(
                 image.fileName,
@@ -92,17 +91,25 @@ const updateProduct = async (
             )
         }
 
+        const cleanBody: Record<string, unknown> = {
+            ...req.body,
+            title: req.body.title ? sanitize(req.body.title) : undefined,
+            description: req.body.description
+                ? sanitize(req.body.description)
+                : undefined,
+            category: req.body.category
+                ? sanitize(req.body.category)
+                : undefined,
+            price: req.body.price ? req.body.price : null,
+            image: req.body.image ? req.body.image : undefined,
+        }
+
         const product = await Product.findByIdAndUpdate(
             productId,
-            {
-                $set: {
-                    ...req.body,
-                    price: req.body.price ? req.body.price : null,
-                    image: req.body.image ? req.body.image : undefined,
-                },
-            },
+            { $set: cleanBody },
             { runValidators: true, new: true }
         ).orFail(() => new NotFoundError('Нет товара по заданному id'))
+
         return res.send(product)
     } catch (error) {
         if (error instanceof MongooseError.ValidationError) {
@@ -120,7 +127,6 @@ const updateProduct = async (
     }
 }
 
-// TODO: Добавить guard admin
 // DELETE /product
 const deleteProduct = async (
     req: Request,
